@@ -98,17 +98,17 @@ curl -X POST http://localhost:5000/api/insurance/extract \
 
 ```json
 {
-  "member_name": "JOHN DOE",
-  "member_id": "XYZ123456789",
-  "group_number": "987654",
-  "insurer_name": "Blue Cross Blue Shield",
-  "plan_name": "PPO Silver",
-  "deductible": "$1,000 IND / $2,000 FAM",
-  "oopm": "$4,000 IND / $8,000 FAM",
-  "rx_bin": "610014",
-  "rx_pcn": "BCBS",
-  "rx_group": "RX1234",
-  "...": "..."
+    "member_name": "JOHN DOE",
+    "member_id": "XYZ123456789",
+    "group_number": "987654",
+    "insurer_name": "Blue Cross Blue Shield",
+    "plan_name": "PPO Silver",
+    "deductible": "$1,000 IND / $2,000 FAM",
+    "oopm": "$4,000 IND / $8,000 FAM",
+    "rx_bin": "610014",
+    "rx_pcn": "BCBS",
+    "rx_group": "RX1234",
+    "...": "..."
 }
 ```
 
