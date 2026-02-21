@@ -103,6 +103,69 @@ def index():
     )
 
 
+# 2026 Federal Poverty Levels (from healthcare.gov)
+FPL_BASE = 15960
+FPL_PER_EXTRA = 5680
+
+
+def get_fpl(household_size):
+    if household_size < 1:
+        raise ValueError("Household size must be at least 1")
+    return FPL_BASE + FPL_PER_EXTRA * (household_size - 1)
+
+
+def get_fpl_percentage(annual_income, household_size):
+    return (annual_income / get_fpl(household_size)) * 100
+
+
+def get_discount(fpl_pct):
+    if fpl_pct <= 100:
+        return 100
+    elif fpl_pct <= 200:
+        return 75
+    elif fpl_pct <= 300:
+        return 50
+    elif fpl_pct <= 400:
+        return 25
+    else:
+        return 0
+
+
+@app.route("/fpl-discount", methods=["GET"])
+def fpl_discount():
+    try:
+        income = float(request.args.get("income"))
+        household_size = int(request.args.get("household_size"))
+    except (TypeError, ValueError):
+        return (
+            jsonify(
+                {
+                    "error": "Please provide valid 'income' and 'household_size' query params"
+                }
+            ),
+            400,
+        )
+
+    if household_size < 1:
+        return jsonify({"error": "household_size must be at least 1"}), 400
+    if income < 0:
+        return jsonify({"error": "income cannot be negative"}), 400
+
+    fpl = get_fpl(household_size)
+    fpl_pct = get_fpl_percentage(income, household_size)
+    discount = get_discount(fpl_pct)
+
+    return jsonify(
+        {
+            "household_size": household_size,
+            "annual_income": income,
+            "fpl_threshold": fpl,
+            "fpl_percentage": round(fpl_pct, 1),
+            "hospital_discount_percent": discount,
+        }
+    )
+
+
 @app.route("/api/insurance/extract", methods=["POST"])
 def get_extracted_insurance():
     """Extract insurance info from base64 image string provided in JSON body"""

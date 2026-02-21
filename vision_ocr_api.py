@@ -54,6 +54,8 @@ def image_file_to_base64(file_storage) -> str:
     return base64.b64encode(file_storage.read()).decode("utf-8")
 
 
+
+
 @app.route("/extract", methods=["POST"])
 def extract_insurance_info():
     base64_image = None
