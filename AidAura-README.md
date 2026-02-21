@@ -220,20 +220,6 @@ Hospital MRF data, insurer Transparency in Coverage data, and Medicare fee sched
 
 ---
 
-## Differentiation
-
-### vs. Caduceo (Hackathon Project)
-
-| Dimension          | Caduceo                        | Waypoint                                                   |
-| ------------------ | ------------------------------ | ---------------------------------------------------------- |
-| Core Function      | Cost lookup & data exploration | Crisis-moment financial decision engine                    |
-| User Mindset       | Planning: calm, browsing       | Crisis: scared, needs guidance                             |
-| Personalization    | General costs by region        | Your insurance, income, hospital, OOP                      |
-| Financial Pathways | None                           | Ranked: charity care → payment plans → negotiation → loans |
-| Charity Care       | Not included                   | Automated 501(r) eligibility screening                     |
-| Output             | Data + chatbot responses       | Actionable guide with steps, deadlines, questions          |
-| Data Challenge     | Retrieval from 2 databases     | Normalization of 6+ fragmented public sources              |
-
 ### vs. Industry
 
 - **Turquoise Health** — Best price data platform ($55M raised), but serves industry, not patients.
@@ -258,6 +244,7 @@ Hospital MRF data, insurer Transparency in Coverage data, and Medicare fee sched
 - **Delta Lake / Snowflake** — Normalized pricing, plan, and charity care data
 - **Redis** — Caching for frequent price lookups
 - **Neo4j** — Graph DB for diagnosis → procedure → provider relationships
+- **Actian/ VectorAI DB** - 
 
 ### ML & Cost Estimation
 
@@ -277,7 +264,7 @@ Hospital MRF data, insurer Transparency in Coverage data, and Medicare fee sched
 
 ## Datathon Challenge Design
 
-### Participant Datasets
+### Datasets
 
 1. **Synthea Synthetic Patients** — 10K–50K patients with diagnoses, insurance, costs, extended with realistic pricing variation (150–400% of Medicare)
 2. **Hospital MRF Sample** — Raw files from 50–100 hospitals with intentional quality issues
@@ -286,19 +273,7 @@ Hospital MRF data, insurer Transparency in Coverage data, and Medicare fee sched
 5. **Charity Care Policy Database** — 200+ hospital financial assistance policies
 6. **CFPB Medical Debt Complaints** — Filtered complaint data
 
-### Challenge Tracks
 
-**Track 1 — Data Standardization**
-Raw hospital MRFs with quality issues. Evaluate on normalization coverage, code-mapping accuracy (F1), and outlier detection.
-
-**Track 2 — Cost Prediction**
-Synthetic patient profiles → predict total episode cost and patient OOP. Evaluate on MAPE, prediction interval calibration (PICP), and interval width (MPIW). Probabilistic outputs required.
-
-**Track 3 — Financial Pathway Recommendation**
-Clinical scenarios + patient financial profiles → ranked financial pathways. Expert panel scoring on actionability, eligibility accuracy, and equity impact.
-
-**Track 4 — Equity Analysis**
-Identify and quantify cost disparities by demographics, geography, and insurance status. Surface the biggest intervention opportunities.
 
 ### Judging Criteria
 
