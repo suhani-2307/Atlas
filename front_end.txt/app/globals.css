@@ -1,0 +1,161 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Playfair+Display:wght@700&family=Public+Sans:wght@300;400;500;600;700;900&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Background image ── */
+.bg-wave {
+  background-image: url('/bg.png');
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
+/* ── Login ── */
+.brand-title {
+  font-family: 'Playfair Display', serif;
+  letter-spacing: -0.02em;
+  text-transform: uppercase;
+  line-height: 1;
+}
+.text-gradient-bg {
+  background: linear-gradient(90deg, #3B82F6, #4ADE80);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  display: inline-block;
+}
+.glass-card {
+  background: rgba(255,255,255,0.6);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(0,0,0,0.05);
+}
+.btn-login {
+  background: linear-gradient(90deg, #3B82F6, #4ADE80);
+  background-size: 200% auto;
+  transition: background-position 0.5s;
+}
+.btn-login:hover { background-position: right center; }
+
+/* ── Insurance ── */
+.glass-header {
+  background: rgba(255,255,255,0.05);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+.action-card {
+  transition: all 0.3s ease;
+  background: rgba(37,99,235,0.05);
+  border: 1px solid rgba(37,99,235,0.1);
+}
+.action-card:hover {
+  background: rgba(37,99,235,0.15);
+  border-color: #2563eb;
+  transform: translateY(-4px);
+}
+
+/* ── Emergency ── */
+.glass-panel {
+  background: rgba(255,255,255,0.7);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(255,255,255,0.5);
+}
+.btn-analyze {
+  background: linear-gradient(90deg, #2563eb 0%, #10b981 100%);
+  transition: all 0.3s ease;
+}
+.btn-analyze:hover {
+  filter: brightness(1.05);
+  box-shadow: 0 4px 15px rgba(16,185,129,0.3);
+}
+
+/* ── Loading ── */
+.frosted-overlay {
+  background: rgba(255,255,255,0.85);
+  backdrop-filter: blur(8px);
+}
+.frosted-card {
+  background: rgba(255,255,255,0.4);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255,255,255,0.5);
+}
+.gradient-text {
+  background: linear-gradient(to right, #2563eb, #10b981);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+@keyframes pulse-aura {
+  0%, 100% { transform: scale(1); opacity: 0.9; box-shadow: 0 0 10px 2px rgba(16,185,129,0.4); }
+  50% { transform: scale(1.2); opacity: 1; box-shadow: 0 0 20px 6px rgba(37,99,235,0.6); }
+}
+@keyframes spin-ring { to { transform: rotate(360deg); } }
+@keyframes check-draw {
+  from { stroke-dashoffset: 20; opacity: 0; }
+  to   { stroke-dashoffset: 0;  opacity: 1; }
+}
+.aura-dot { animation: pulse-aura 2.5s infinite ease-in-out; }
+.aura-dot-d1 { animation: pulse-aura 2.5s 0.8s infinite ease-in-out; }
+.aura-dot-d2 { animation: pulse-aura 2.5s 1.6s infinite ease-in-out; }
+.spinner-ring { animation: spin-ring 0.9s linear infinite; transform-origin: center; }
+.step-check { stroke-dasharray: 20; stroke-dashoffset: 20; animation: check-draw 0.4s ease forwards; }
+
+/* ── Decision Tree ── */
+.node-card {
+  background: rgba(255,255,255,0.45);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1.5px solid rgba(255,255,255,0.8);
+  border-radius: 16px;
+  transition: transform 0.25s ease, box-shadow 0.25s ease, background 0.25s ease;
+  cursor: pointer;
+}
+.node-card:hover:not(.selected):not(.rejected) {
+  background: rgba(255,255,255,0.72);
+  box-shadow: 0 10px 36px rgba(0,0,0,0.1);
+  transform: translateY(-3px) scale(1.02);
+}
+.node-card.selected {
+  background: rgba(255,255,255,0.95);
+  border-color: transparent;
+  cursor: default;
+  box-shadow: 0 8px 32px rgba(19,127,236,0.18);
+  position: relative;
+}
+.node-card.selected::before {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  border-radius: 18px;
+  background: linear-gradient(135deg, #3B82F6 0%, #4ADE80 100%);
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+  z-index: -1;
+}
+.node-card.selected::after {
+  content: '';
+  position: absolute;
+  inset: -5px;
+  border-radius: 21px;
+  background: linear-gradient(135deg, rgba(59,130,246,0.25), rgba(74,222,128,0.25));
+  filter: blur(9px);
+  z-index: -2;
+  pointer-events: none;
+}
+.node-card.rejected {
+  opacity: 0.35;
+  transform: scale(0.93);
+  cursor: default;
+  pointer-events: none;
+}
+.node-card.terminal.selected::before {
+  background: linear-gradient(135deg, #4ADE80, #22c55e);
+}
+.node-card.terminal.selected::after {
+  background: linear-gradient(135deg, rgba(74,222,128,0.35), rgba(34,197,94,0.25));
+}
