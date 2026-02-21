@@ -55,7 +55,7 @@ def image_file_to_base64(file_storage) -> str:
 
 
 @app.route("/extract", methods=["POST"])
-def extract_insurance_id():
+def extract_insurance_info():
     base64_image = None
 
     if "image" in request.files:
