@@ -97,6 +97,9 @@ def index():
                     "insurance": {
                         "extract": "POST /api/insurance/extract",
                     },
+                    "fpl_discount": {
+                        "calculate": "POST /fpl-discount",
+                    },
                 },
             }
         ),
@@ -132,20 +135,15 @@ def get_discount(fpl_pct):
         return 0
 
 
-@app.route("/fpl-discount", methods=["GET"])
+@app.route("/fpl-discount", methods=["POST"])
 def fpl_discount():
+    data = request.get_json()
+
     try:
-        income = float(request.args.get("income"))
-        household_size = int(request.args.get("household_size"))
+        income = float(data.get("income"))
+        household_size = int(data.get("household_size"))
     except (TypeError, ValueError):
-        return (
-            jsonify(
-                {
-                    "error": "Please provide valid 'income' and 'household_size' query params"
-                }
-            ),
-            400,
-        )
+        return jsonify({"error": "Invalid income or household_size"}), 400
 
     if household_size < 1:
         return jsonify({"error": "household_size must be at least 1"}), 400
@@ -154,7 +152,10 @@ def fpl_discount():
 
     fpl = get_fpl(household_size)
     fpl_pct = get_fpl_percentage(income, household_size)
-    discount = get_discount(fpl_pct)
+    discount_percent = get_discount(fpl_pct)
+
+    # Estimated deduction amount
+    deduction_amount = (discount_percent / 100) * income
 
     return jsonify(
         {
@@ -162,7 +163,8 @@ def fpl_discount():
             "annual_income": income,
             "fpl_threshold": fpl,
             "fpl_percentage": round(fpl_pct, 1),
-            "hospital_discount_percent": discount,
+            "hospital_discount_percent": discount_percent,
+            "estimated_deduction_amount": round(deduction_amount, 2),
         }
     )
 
