@@ -14,6 +14,10 @@ GROQ_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct"
 
 embed_model = SentenceTransformer("all-MiniLM-L6-v2")
 
+# Reuse a single event loop across all Flask requests to avoid creating a new
+# gRPC channel on every call (which causes too_many_pings / ENHANCE_YOUR_CALM).
+_loop = asyncio.new_event_loop()
+
 
 class CategorySelection(BaseModel):
     selected_categories: List[str]
@@ -110,5 +114,5 @@ def search_cpt_by_reason(reason: str, top_k: int = 10, score_threshold: float = 
         procedure_code_description, score.
     """
     groq_client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
-    results = asyncio.run(_pipeline(reason, top_k, groq_client))
+    results = _loop.run_until_complete(_pipeline(reason, top_k, groq_client))
     return [r for r in results if r["score"] >= score_threshold]
