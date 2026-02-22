@@ -1,4 +1,14 @@
+"use client";
 import { useRef, useState, useCallback, useEffect } from "react";
+import { useRouter } from "next/navigation";
+
+// Extend window type for dynamically loaded pdf.js
+declare global {
+  interface Window {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    pdfjsLib: any;
+  }
+}
 
 const FIELDS = [
   { key: "insurer_name", label: "Insurance Provider", full: true },
@@ -15,22 +25,22 @@ const FIELDS = [
   { key: "effective_date", label: "Effective Date" },
 ];
 
-function readFileAsDataURL(file) {
-  return new Promise((resolve, reject) => {
+function readFileAsDataURL(file: File): Promise<string> {
+  return new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
-    reader.onload = () => resolve(reader.result);
+    reader.onload = () => resolve(reader.result as string);
     reader.onerror = () => reject(new Error("Failed to read file"));
     reader.readAsDataURL(file);
   });
 }
 
-async function pdfToImageDataURL(pdfDataUrl) {
+async function pdfToImageDataURL(pdfDataUrl: string): Promise<string> {
   try {
     if (!window.pdfjsLib) {
       await new Promise((resolve, reject) => {
         const script = document.createElement("script");
         script.src = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js";
-        script.onload = () => resolve();
+        script.onload = () => resolve("");
         script.onerror = () => reject(new Error("pdf.js load failed"));
         document.head.appendChild(script);
       });
@@ -55,7 +65,7 @@ async function pdfToImageDataURL(pdfDataUrl) {
   }
 }
 
-function getMediaType(file) {
+function getMediaType(file: File): string {
   const mime = file.type.toLowerCase();
   if (mime === "image/png") return "image/png";
   if (mime === "image/gif") return "image/gif";
@@ -64,18 +74,22 @@ function getMediaType(file) {
 }
 
 export default function InsurancePage() {
+  const router = useRouter();
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+
   const [modalOpen, setModalOpen] = useState(false);
   const [view, setView] = useState("choose");
-  const fileInputRef = useRef(null);
-  const videoRef = useRef(null);
-  const canvasRef = useRef(null);
-  const streamRef = useRef(null);
-  const [previewSrc, setPreviewSrc] = useState(null);
-  const [base64Data, setBase64Data] = useState(null);
-  const [cameraError, setCameraError] = useState(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const [previewSrc, setPreviewSrc] = useState<string | null>(null);
+  const [base64Data, setBase64Data] = useState<string | null>(null);
+  const [cameraError, setCameraError] = useState<string | null>(null);
 
   const [analysisState, setAnalysisState] = useState("idle");
-  const [insuranceData, setInsuranceData] = useState(null);
+  const [insuranceData, setInsuranceData] = useState<Record<string, string> | null>(null);
   const [analysisRaw, setAnalysisRaw] = useState("");
   const [analysisError, setAnalysisError] = useState("");
 
@@ -88,12 +102,14 @@ export default function InsurancePage() {
   const [familySize, setFamilySize] = useState("");
   const [householdError, setHouseholdError] = useState("");
 
-  useEffect(() => { return () => stopStream(); }, []);
+  const [insuranceDone, setInsuranceDone] = useState(false);
 
   const stopStream = () => {
     streamRef.current?.getTracks().forEach((t) => t.stop());
     streamRef.current = null;
   };
+
+  useEffect(() => { return () => stopStream(); }, []);
 
   const closeModal = () => {
     stopStream();
@@ -108,7 +124,7 @@ export default function InsurancePage() {
     setAnalysisError("");
   };
 
-  const analyzeImage = useCallback(async (imageDataUrl, mediaType = "image/jpeg") => {
+  const analyzeImage = useCallback(async (imageDataUrl: string, mediaType = "image/jpeg") => {
     setAnalysisState("analyzing");
     setInsuranceData(null);
     setAnalysisRaw("");
@@ -122,23 +138,10 @@ export default function InsurancePage() {
     }
 
     try {
-      const resp = await fetch("https://api.anthropic.com/v1/messages", {
+      const resp = await fetch("http://localhost:5000/api/insurance/extract", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model: "claude-sonnet-4-20250514",
-          max_tokens: 1000,
-          messages: [{
-            role: "user",
-            content: [
-              { type: "image", source: { type: "base64", media_type: mediaType, data: base64 } },
-              {
-                type: "text",
-                text: `You are an insurance card OCR extractor. Carefully analyze every piece of text visible in this image and extract all insurance card details.\n\nRespond ONLY with a valid JSON object — no markdown fences, no explanation, no extra text — using exactly these keys:\n{\n  "insurer_name": "",\n  "member_name": "",\n  "member_id": "",\n  "group_number": "",\n  "plan_name": "",\n  "plan_type": "",\n  "copay": "",\n  "deductible": "",\n  "rx_bin": "",\n  "rx_pcn": "",\n  "phone": "",\n  "effective_date": "",\n  "notes": ""\n}\n\nRules:\n- Use an empty string "" for any field that is not visible or not present.\n- Preserve exact formatting for IDs and numbers.\n- If this does not appear to be an insurance card at all, set "notes" to explain what the image shows.\n- Do not add any keys beyond those listed above.`,
-              },
-            ],
-          }],
-        }),
+        body: JSON.stringify({ image_base64: base64 }),
       });
 
       if (!resp.ok) {
@@ -146,19 +149,11 @@ export default function InsurancePage() {
         throw new Error(`API error ${resp.status}: ${errBody.slice(0, 200)}`);
       }
 
-      const data = await resp.json();
-      const text = (data.content || []).map((c) => c.text ?? "").join("").trim();
-      if (!text) throw new Error("Empty response from API");
+      const parsed = await resp.json();
+      if (parsed.error) throw new Error(parsed.error);
 
-      const clean = text.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
-
-      try {
-        const parsed = JSON.parse(clean);
-        setInsuranceData(parsed);
-        sessionStorage.setItem("aidaura_insurance_data", JSON.stringify(parsed));
-      } catch {
-        setAnalysisRaw(clean.slice(0, 800));
-      }
+      setInsuranceData(parsed);
+      sessionStorage.setItem("aidaura_insurance_data", JSON.stringify(parsed));
       setAnalysisState("done");
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Unknown error";
@@ -167,7 +162,7 @@ export default function InsurancePage() {
     }
   }, []);
 
-  const handleFileChange = async (e) => {
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     e.target.value = "";
@@ -180,8 +175,8 @@ export default function InsurancePage() {
       } else {
         mediaType = getMediaType(file);
       }
-      setBase64Data(dataUrl);
-      setPreviewSrc(dataUrl);
+      setBase64Data(dataUrl as string);
+      setPreviewSrc(dataUrl as string);
       setView("preview");
       await analyzeImage(dataUrl, mediaType);
     } catch (err) {
@@ -213,6 +208,8 @@ export default function InsurancePage() {
     }
   }, []);
 
+  if (!mounted) return null;
+
   const capturePhoto = () => {
     const video = videoRef.current;
     const canvas = canvasRef.current;
@@ -236,27 +233,44 @@ export default function InsurancePage() {
     }
     sessionStorage.setItem("aidaura_household_income", householdIncome.trim());
     sessionStorage.setItem("aidaura_family_size", familySize.trim());
-    alert("✅ Data saved to sessionStorage. In the full app, this would navigate to /emergency.");
+
+    if (base64Data) {
+      try {
+        const resp = await fetch("http://localhost:5000/api/insurance/extract", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ image_base64: base64Data }),
+        });
+        const data = await resp.json();
+        sessionStorage.setItem("aidaura_extract_result", JSON.stringify(data));
+      } catch (err) {
+        console.error("Failed to call /extract:", err);
+      }
+    }
+
+
+    router.push("/emergency");
   };
 
-  const handleManualSubmit = () => {
+  const handleManualSubmit = async () => {
     if (!memberId.trim() || !groupNumber.trim()) {
       setManualError("Both fields are required.");
       return;
     }
-    if (!householdIncome.trim() || !familySize.trim()) {
-      setManualError("Please also fill in your household income and family size on the main page.");
-      return;
-    }
+
     sessionStorage.setItem("aidaura_member_id", memberId.trim());
     sessionStorage.setItem("aidaura_group_number", groupNumber.trim());
-    sessionStorage.setItem("aidaura_household_income", householdIncome.trim());
-    sessionStorage.setItem("aidaura_family_size", familySize.trim());
-    alert("✅ Manual data saved. In the full app, this would navigate to /emergency.");
+
+    setInsuranceDone(true);
     setManualOpen(false);
   };
 
   const filledCount = insuranceData ? FIELDS.filter((f) => insuranceData[f.key]).length : 0;
+
+  const handleUseCard = () => {
+    setInsuranceDone(true);
+    closeModal();
+  };
 
   return (
     <div style={{ fontFamily: "'DM Sans', 'Segoe UI', sans-serif", background: "#f8f6f6", minHeight: "100vh", display: "flex", flexDirection: "column" }}>
@@ -275,7 +289,6 @@ export default function InsurancePage() {
           transition: all 0.25s ease;
           outline: none;
           position: relative;
-          overflow: hidden;
         }
         .action-card::before {
           content: '';
@@ -403,11 +416,9 @@ export default function InsurancePage() {
 
       {/* Header */}
       <header style={{ background: "white", borderBottom: "1px solid #e2e8f0", padding: "16px 32px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <div style={{ width: 32, height: 32, borderRadius: "50%", border: "1.5px solid #3b82f6", background: "#eff6ff", display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <div style={{ width: 20, height: 20, borderRadius: "50%", background: "linear-gradient(135deg, #06b6d4, #14b8a6)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-              <svg width="12" height="12" fill="none" stroke="white" viewBox="0 0 24 24"><path d="M12 6v6m0 0v6m0-6h6m-6 0H6" strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} /></svg>
-            </div>
+        <div onClick={() => router.push('/')} style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}>
+          <div style={{ width: 36, height: 36, borderRadius: 10, background: "linear-gradient(135deg, #2563eb, #10b981)", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 2px 8px rgba(37,99,235,0.35)" }}>
+            <span style={{ fontFamily: '"Kaushan Script", cursive', fontSize: '1.05rem', color: 'white', lineHeight: 1 }}>A3</span>
           </div>
           <span style={{ fontWeight: 800, fontSize: "1.1rem", color: "#0f172a" }}>Aid<span style={{ background: "linear-gradient(90deg, #2563eb, #10b981)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" }}>Aura</span></span>
         </div>
@@ -426,22 +437,32 @@ export default function InsurancePage() {
           {/* Cards */}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24, marginBottom: 48 }}>
             <button className="action-card" onClick={() => { setModalOpen(true); setView("choose"); }} style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "48px 32px", gap: 20 }}>
-              <div style={{ width: 72, height: 72, borderRadius: "50%", background: "linear-gradient(135deg, rgba(37,99,235,0.1), rgba(16,185,129,0.1))", display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.3s" }}>
-                <svg width="32" height="32" fill="none" stroke="#2563eb" viewBox="0 0 24 24"><path d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} /></svg>
+              {insuranceDone && (
+                <div style={{ position: "absolute", top: 12, right: 12, background: "linear-gradient(135deg, #10b981, #059669)", borderRadius: "50%", width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 2px 8px rgba(16,185,129,0.4)" }}>
+                  <svg width="14" height="14" fill="none" stroke="white" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7" strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} /></svg>
+                </div>
+              )}
+              <div style={{ width: 72, height: 72, borderRadius: "50%", background: insuranceDone ? "linear-gradient(135deg, rgba(16,185,129,0.15), rgba(5,150,105,0.15))" : "linear-gradient(135deg, rgba(37,99,235,0.1), rgba(16,185,129,0.1))", display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.3s" }}>
+                <svg width="32" height="32" fill="none" stroke={insuranceDone ? "#10b981" : "#2563eb"} viewBox="0 0 24 24"><path d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} /></svg>
               </div>
               <div>
-                <div style={{ fontWeight: 700, fontSize: "1.1rem", color: "#0f172a" }}>Upload file</div>
-                <div style={{ fontSize: "0.85rem", color: "#94a3b8", marginTop: 6 }}>Upload a file or scan with camera</div>
+                <div style={{ fontWeight: 700, fontSize: "1.1rem", color: insuranceDone ? "#059669" : "#0f172a" }}>Upload file</div>
+                <div style={{ fontSize: "0.85rem", color: insuranceDone ? "#10b981" : "#94a3b8", marginTop: 6 }}>{insuranceDone ? "Card saved ✓" : "Upload a file or scan with camera"}</div>
               </div>
             </button>
 
             <button className="action-card" onClick={() => { setManualOpen(true); setMemberId(""); setGroupNumber(""); setManualError(""); }} style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "48px 32px", gap: 20 }}>
-              <div style={{ width: 72, height: 72, borderRadius: "50%", background: "linear-gradient(135deg, rgba(37,99,235,0.1), rgba(16,185,129,0.1))", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                <svg width="32" height="32" fill="none" stroke="#2563eb" viewBox="0 0 24 24"><path d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} /></svg>
+              {insuranceDone && (
+                <div style={{ position: "absolute", top: 12, right: 12, background: "linear-gradient(135deg, #10b981, #059669)", borderRadius: "50%", width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 2px 8px rgba(16,185,129,0.4)" }}>
+                  <svg width="14" height="14" fill="none" stroke="white" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7" strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} /></svg>
+                </div>
+              )}
+              <div style={{ width: 72, height: 72, borderRadius: "50%", background: insuranceDone ? "linear-gradient(135deg, rgba(16,185,129,0.15), rgba(5,150,105,0.15))" : "linear-gradient(135deg, rgba(37,99,235,0.1), rgba(16,185,129,0.1))", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <svg width="32" height="32" fill="none" stroke={insuranceDone ? "#10b981" : "#2563eb"} viewBox="0 0 24 24"><path d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} /></svg>
               </div>
               <div>
-                <div style={{ fontWeight: 700, fontSize: "1.1rem", color: "#0f172a" }}>Manually input information</div>
-                <div style={{ fontSize: "0.85rem", color: "#94a3b8", marginTop: 6 }}>Enter details yourself!</div>
+                <div style={{ fontWeight: 700, fontSize: "1.1rem", color: insuranceDone ? "#059669" : "#0f172a" }}>Manually input information</div>
+                <div style={{ fontSize: "0.85rem", color: insuranceDone ? "#10b981" : "#94a3b8", marginTop: 6 }}>{insuranceDone ? "Details saved ✓" : "Enter details yourself!"}</div>
               </div>
             </button>
           </div>
@@ -517,16 +538,7 @@ export default function InsurancePage() {
           </div>
 
           <div style={{ display: "flex", justifyContent: "center" }}>
-            <button className="btn-primary" onClick={() => {
-              if (!householdIncome.trim() || !familySize.trim()) {
-                setHouseholdError("Please fill in your household income and family size before continuing.");
-                document.getElementById("household-section")?.scrollIntoView({ behavior: "smooth" });
-                return;
-              }
-              sessionStorage.setItem("aidaura_household_income", householdIncome.trim());
-              sessionStorage.setItem("aidaura_family_size", familySize.trim());
-              alert("✅ Saved! Navigating to /emergency…");
-            }} style={{ fontSize: "1.1rem", padding: "16px 40px" }}>
+            <button className="btn-primary" onClick={handleSubmit} style={{ fontSize: "1.1rem", padding: "16px 40px" }}>
               Continue
               <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M13 7l5 5m0 0l-5 5m5-5H6" strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} /></svg>
             </button>
@@ -536,7 +548,7 @@ export default function InsurancePage() {
 
       {/* Footer */}
       <footer style={{ textAlign: "center", padding: "20px", fontSize: "0.8rem", color: "#94a3b8", borderTop: "1px solid #e2e8f0", background: "white" }}>
-        © 2025 AidAura. All rights reserved.
+        © 2026 AidAura. All rights reserved.
       </footer>
 
       <input ref={fileInputRef} type="file" accept="image/*,application/pdf" style={{ display: "none" }} onChange={handleFileChange} />
@@ -711,7 +723,7 @@ export default function InsurancePage() {
 
                 <button
                   className="btn-primary"
-                  onClick={handleSubmit}
+                  onClick={handleUseCard}
                   disabled={analysisState === "analyzing"}
                   style={{ width: "100%", justifyContent: "center", background: "linear-gradient(90deg, #2563eb, #10b981)" }}
                 >
@@ -769,16 +781,7 @@ export default function InsurancePage() {
 
               <button
                 className="btn-primary"
-                onClick={() => {
-                  if (!memberId.trim() || !groupNumber.trim()) {
-                    setManualError("Both fields are required.");
-                    return;
-                  }
-                  sessionStorage.setItem("aidaura_member_id", memberId.trim());
-                  sessionStorage.setItem("aidaura_group_number", groupNumber.trim());
-                  sessionStorage.setItem("aidaura_input_method", "manual");
-                  setManualOpen(false);
-                }}
+                onClick={handleManualSubmit}
                 style={{ width: "100%", justifyContent: "center", marginTop: 20, background: "linear-gradient(90deg, #2563eb, #10b981)" }}
               >
                 Save

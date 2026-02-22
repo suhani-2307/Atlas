@@ -63,18 +63,10 @@ export default function LoginPage() {
             </div>
           </div>
 
-          <footer className="mt-8 text-center">
-            <p className="text-sm text-gray-600">
-              New to Aidora?{' '}
-              <a href="#" className="text-blue-500 hover:text-pink-500 transition-colors duration-300 font-medium">
-                Request Access
-              </a>
-            </p>
-          </footer>
         </section>
 
         <div className="mt-12 text-center text-[10px] uppercase tracking-tighter opacity-50 text-gray-600">
-          © 2023 Aidora AI Systems. All Rights Reserved.
+          © 2026 AidAura Healthcare Systems. All Rights Reserved.
         </div>
       </main>
     </div>

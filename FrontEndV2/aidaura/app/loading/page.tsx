@@ -13,9 +13,9 @@ interface Step {
 }
 
 const STEPS: Step[] = [
-  { label: 'Connecting to provider…',  doneLabel: 'Connected',           detail: 'Reached provider endpoint',     color: '#10b981' },
-  { label: 'Authenticating…',          doneLabel: 'Authenticated',        detail: 'Member identity verified',      color: '#2563eb' },
-  { label: 'Retrieving coverage…',     doneLabel: 'Coverage retrieved',   detail: 'Benefits loaded successfully',  color: '#10b981' },
+  { label: 'Connecting to provider…', doneLabel: 'Connected', detail: 'Reached provider endpoint', color: '#10b981' },
+  { label: 'Authenticating…', doneLabel: 'Authenticated', detail: 'Member identity verified', color: '#2563eb' },
+  { label: 'Retrieving coverage…', doneLabel: 'Coverage retrieved', detail: 'Benefits loaded successfully', color: '#10b981' },
 ]
 
 export default function LoadingPage() {
@@ -23,21 +23,21 @@ export default function LoadingPage() {
   const [states, setStates] = useState<StepState[]>(['pending', 'pending', 'pending'])
 
   useEffect(() => {
-    const name     = sessionStorage.getItem('aidaura_name')     || 'Member'
+    const name = sessionStorage.getItem('aidaura_name') || 'Member'
     const provider = sessionStorage.getItem('aidaura_provider') || 'your provider'
 
     const timings = [
-      [600,  1800],
-      [1900, 3200],
-      [3300, 4800],
+      [400, 1200],
+      [1300, 2200],
+      [2300, 3300],
     ]
 
     timings.forEach(([activateAt, doneAt], i) => {
-      setTimeout(() => setStates(s => { const n=[...s]; n[i]='active'; return n }), activateAt)
-      setTimeout(() => setStates(s => { const n=[...s]; n[i]='done';   return n }), doneAt)
+      setTimeout(() => setStates(s => { const n = [...s]; n[i] = 'active'; return n }), activateAt)
+      setTimeout(() => setStates(s => { const n = [...s]; n[i] = 'done'; return n }), doneAt)
     })
 
-    setTimeout(() => router.push('/results'), 5800)
+    setTimeout(() => router.push('/results'), 4000)
   }, [router])
 
   return (
@@ -50,13 +50,9 @@ export default function LoadingPage() {
 
       {/* Header */}
       <header className="relative z-10 flex items-center justify-between px-8 py-6">
-        <div className="flex items-center gap-3">
-          <div className="relative flex items-center justify-center w-12 h-12 rounded-full border-[1.5px] border-blue-500 bg-blue-50">
-            <div className="flex items-center justify-center w-8 h-8 rounded-full bg-gradient-to-br from-cyan-500 to-teal-500 shadow-inner">
-              <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path d="M12 6v6m0 0v6m0-6h6m-6 0H6" strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} />
-              </svg>
-            </div>
+        <div className="flex items-center gap-3 cursor-pointer" onClick={() => router.push('/')}>
+          <div className="flex items-center justify-center w-10 h-10 rounded-xl shadow-md" style={{ background: 'linear-gradient(135deg, #2563eb, #10b981)', boxShadow: '0 2px 10px rgba(37,99,235,0.35)' }}>
+            <span style={{ fontFamily: '"Kaushan Script", cursive', fontSize: '1.1rem', color: 'white', lineHeight: 1 }}>A3</span>
           </div>
           <span className="text-4xl font-extrabold tracking-tight text-slate-900" style={{ fontFamily: '"Public Sans", sans-serif' }}>
             Aid<span className="text-blue-500">Aura</span>
@@ -134,7 +130,7 @@ export default function LoadingPage() {
               <path d="M9 12l2 2 4-4" strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} />
             </svg>
           </div>
-          <span>© 2024 AidAura. All rights reserved.</span>
+          <span>© 2026 AidAura. All rights reserved.</span>
         </div>
         <nav className="flex gap-6">
           <a href="#" className="hover:text-slate-600 transition-colors">Privacy Policy</a>
