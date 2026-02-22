@@ -5,5 +5,3 @@ requests==2.31.0
 beautifulsoup4==4.12.3
 PyPDF2==3.0.1
 python-dotenv==1.0.0
-firecrawl-py>=1.0.0
-sentence-transformers>=2.2.0
