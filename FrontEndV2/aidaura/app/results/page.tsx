@@ -59,7 +59,6 @@ export default function ResultsPage() {
     const node = TREE[id]
     if (!node) return
 
-    // Update level selection
     setLevels(prev => {
       const next = prev.map((l, i) => i === levelIndex ? { ...l, selectedId: id } : l)
       if (!node.terminal && node.children) {
@@ -74,7 +73,6 @@ export default function ResultsPage() {
       setTimeout(() => setCompletion({ id, node }), 500)
     }
 
-    // Scroll down after a short delay
     setTimeout(() => {
       scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' })
     }, 300)
@@ -107,7 +105,6 @@ export default function ResultsPage() {
             backgroundPosition: 'center',
           }}
         />
-        {/* Grid */}
         <div
           className="absolute inset-0 opacity-[0.04]"
           style={{
@@ -135,7 +132,6 @@ export default function ResultsPage() {
         <span className="text-slate-300 mx-1">|</span>
         <span className="text-xs font-semibold text-blue-600 uppercase tracking-widest">Decision Navigator</span>
 
-        {/* Breadcrumb */}
         {path.length > 0 && (
           <div className="flex items-center gap-1 ml-2 flex-wrap">
             {path.map((p, i) => (
@@ -170,12 +166,10 @@ export default function ResultsPage() {
           {/* Levels */}
           {levels.map((level, levelIndex) => (
             <div key={levelIndex} className="mb-2">
-              {/* Level label */}
               <div className="text-center mb-4 text-xs font-bold uppercase tracking-widest text-slate-400">
                 <span className="text-blue-500">{STEP_LABELS[levelIndex] ?? `Step ${levelIndex + 1}`}</span>
               </div>
 
-              {/* Connector from previous */}
               {levelIndex > 0 && (
                 <div className="flex justify-center mb-4">
                   <div className="w-px h-10 bg-gradient-to-b from-blue-400 to-teal-400 opacity-40" />
@@ -191,6 +185,17 @@ export default function ResultsPage() {
                   const isRejected = level.selectedId !== null && !isSelected
                   const isActive   = level.selectedId === null
 
+                  // ── FIX: terminal-selected cards get explicit inline styles so the
+                  //    green background is guaranteed regardless of what .node-card,
+                  //    .selected, or .terminal classes do (or don't) define.
+                  const terminalSelectedStyle = isSelected && node.terminal
+                    ? {
+                        background: 'linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%)',
+                        border: '2px solid #22c55e',
+                        boxShadow: '0 0 0 4px rgba(34,197,94,0.12), 0 8px 24px rgba(34,197,94,0.15)',
+                      }
+                    : undefined
+
                   return (
                     <div
                       key={id}
@@ -200,19 +205,27 @@ export default function ResultsPage() {
                         isSelected ? 'selected' : '',
                         isRejected ? 'rejected' : '',
                         node.terminal ? 'terminal' : '',
-                      ].join(' ')}
-                      style={{ transition: 'all 0.4s cubic-bezier(0.16,1,0.3,1)' }}
+                      ].filter(Boolean).join(' ')}
+                      style={{
+                        transition: 'all 0.4s cubic-bezier(0.16,1,0.3,1)',
+                        ...terminalSelectedStyle,
+                      }}
                     >
                       {isSelected && (
-                        <div className="absolute -top-2.5 left-3 bg-blue-500 text-white text-[9px] font-bold tracking-widest uppercase px-2 py-0.5 rounded-full z-10">
-                          Selected
+                        <div className={`absolute -top-2.5 left-3 text-white text-[9px] font-bold tracking-widest uppercase px-2 py-0.5 rounded-full z-10 ${node.terminal ? 'bg-green-500' : 'bg-blue-500'}`}>
+                          {node.terminal ? '✓ Final' : 'Selected'}
                         </div>
                       )}
+
                       <div className="text-2xl mb-2">{node.icon}</div>
                       <div className="text-sm font-bold text-slate-900 mb-1.5">{node.title}</div>
                       <div className="text-[11px] text-slate-500 leading-relaxed flex-1">{node.description}</div>
-                      <div className={`mt-3 pt-2.5 border-t border-slate-100 text-[11px] font-semibold ${node.terminal ? 'text-green-600' : 'text-blue-500'}`}>
-                        {isSelected ? (node.terminal ? '✓ Final choice' : '→ Continued') : (node.terminal ? 'Select →' : 'Explore →')}
+                      <div className={`mt-3 pt-2.5 border-t border-slate-100 text-[11px] font-semibold ${
+                        node.terminal ? 'text-green-600' : 'text-blue-500'
+                      }`}>
+                        {isSelected
+                          ? (node.terminal ? '✓ Final choice' : '→ Continued')
+                          : (node.terminal ? 'Select →' : 'Explore →')}
                       </div>
                     </div>
                   )
