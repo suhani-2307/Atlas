@@ -53,7 +53,7 @@ export default function InsurancePage() {
   const fileToBase64 = (file: File): Promise<string> =>
     new Promise((resolve, reject) => {
       const reader = new FileReader()
-      reader.onload  = () => resolve(reader.result as string)
+      reader.onload = () => resolve(reader.result as string)
       reader.onerror = reject
       reader.readAsDataURL(file)
     })
@@ -99,10 +99,10 @@ export default function InsurancePage() {
   }, [])
 
   const capturePhoto = () => {
-    const video  = videoRef.current
+    const video = videoRef.current
     const canvas = canvasRef.current
     if (!video || !canvas) return
-    canvas.width  = video.videoWidth
+    canvas.width = video.videoWidth
     canvas.height = video.videoHeight
     canvas.getContext('2d')?.drawImage(video, 0, 0)
     const dataUrl = canvas.toDataURL('image/jpeg', 0.92)
@@ -114,10 +114,20 @@ export default function InsurancePage() {
     setView('preview')
   }
 
+  const logSessionStorage = () => {
+    console.log('── sessionStorage dump ──')
+    for (let i = 0; i < sessionStorage.length; i++) {
+      const key = sessionStorage.key(i)!
+      console.log(`  ${key}:`, sessionStorage.getItem(key))
+    }
+    console.log('────────────────────────')
+  }
+
   const handleSubmit = async () => {
     if (!base64Data) return
     setUploading(true)
     sessionStorage.setItem('aidaura_insurance_image', base64Data)
+    sessionStorage.setItem('aidaura_input_method', 'image')
     try {
       const resp = await fetch('http://localhost:5000/api/insurance/extract', {
         method: 'POST',
@@ -127,23 +137,42 @@ export default function InsurancePage() {
       if (resp.ok) {
         const data = await resp.json()
         sessionStorage.setItem('aidaura_insurance_data', JSON.stringify(data))
-        sessionStorage.setItem('aidaura_provider',  data.insurer_name || '')
-        sessionStorage.setItem('aidaura_member_id', data.member_id    || '')
-        sessionStorage.setItem('aidaura_plan',      data.plan_name    || '')
+        sessionStorage.setItem('aidaura_provider', data.insurer_name || '')
+        sessionStorage.setItem('aidaura_member_id', data.member_id || '')
+        sessionStorage.setItem('aidaura_group_number', data.group_number || '')
+        sessionStorage.setItem('aidaura_plan', data.plan_name || '')
       }
     } catch { /* backend offline */ }
+    logSessionStorage()
     router.push('/emergency')
   }
 
   // ── Manual submit ────────────────────────────────────
-  const handleManualSubmit = () => {
+  const handleManualSubmit = async () => {
     if (!memberId.trim() || !groupNumber.trim()) {
       setManualError('Both fields are required.')
       return
     }
-    sessionStorage.setItem('aidaura_member_id',    memberId.trim())
+    setUploading(true)
+    sessionStorage.setItem('aidaura_member_id', memberId.trim())
     sessionStorage.setItem('aidaura_group_number', groupNumber.trim())
     sessionStorage.setItem('aidaura_input_method', 'manual')
+    try {
+      const resp = await fetch('http://localhost:5000/api/insurance/extract', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ member_id: memberId.trim(), group_number: groupNumber.trim() }),
+      })
+      if (resp.ok) {
+        const data = await resp.json()
+        sessionStorage.setItem('aidaura_insurance_data', JSON.stringify(data))
+        sessionStorage.setItem('aidaura_provider', data.insurer_name || '')
+        sessionStorage.setItem('aidaura_member_id', data.member_id || memberId.trim())
+        sessionStorage.setItem('aidaura_group_number', data.group_number || groupNumber.trim())
+        sessionStorage.setItem('aidaura_plan', data.plan_name || '')
+      }
+    } catch { /* backend offline */ }
+    logSessionStorage()
     router.push('/emergency')
   }
 
@@ -290,7 +319,7 @@ export default function InsurancePage() {
                       <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                         <div className="w-[85%] aspect-[1.586/1] rounded-xl" style={{ border: '2.5px solid rgba(99,220,180,0.9)', boxShadow: '0 0 0 9999px rgba(0,0,0,0.45)' }} />
                       </div>
-                      {['top-[7%] left-[7%] border-t-2 border-l-2 rounded-tl-lg','top-[7%] right-[7%] border-t-2 border-r-2 rounded-tr-lg','bottom-[7%] left-[7%] border-b-2 border-l-2 rounded-bl-lg','bottom-[7%] right-[7%] border-b-2 border-r-2 rounded-br-lg'].map((cls, i) => (
+                      {['top-[7%] left-[7%] border-t-2 border-l-2 rounded-tl-lg', 'top-[7%] right-[7%] border-t-2 border-r-2 rounded-tr-lg', 'bottom-[7%] left-[7%] border-b-2 border-l-2 rounded-bl-lg', 'bottom-[7%] right-[7%] border-b-2 border-r-2 rounded-br-lg'].map((cls, i) => (
                         <div key={i} className={`absolute w-6 h-6 border-teal-400 pointer-events-none ${cls}`} />
                       ))}
                       <div className="absolute bottom-3 left-1/2 -translate-x-1/2 text-[11px] text-white/70 tracking-wide">Align card within the frame</div>
@@ -317,16 +346,15 @@ export default function InsurancePage() {
                 <div className="rounded-2xl overflow-hidden border-2 border-slate-100 mb-4 bg-slate-50">
                   <img src={previewSrc} alt="Insurance card preview" className="w-full object-contain max-h-48" />
                 </div>
-                <div className={`rounded-xl border px-4 py-3 mb-5 text-xs font-mono transition-all ${
-                  convertState === 'converting' ? 'border-blue-200 bg-blue-50' :
-                  convertState === 'done'       ? 'border-teal-200 bg-teal-50' :
-                  convertState === 'error'      ? 'border-red-200 bg-red-50'   :
-                  'border-slate-100 bg-slate-50'
-                }`}>
+                <div className={`rounded-xl border px-4 py-3 mb-5 text-xs font-mono transition-all ${convertState === 'converting' ? 'border-blue-200 bg-blue-50' :
+                    convertState === 'done' ? 'border-teal-200 bg-teal-50' :
+                      convertState === 'error' ? 'border-red-200 bg-red-50' :
+                        'border-slate-100 bg-slate-50'
+                  }`}>
                   <div className="flex items-center gap-2 mb-1">
                     {convertState === 'converting' && <svg className="w-3.5 h-3.5 text-blue-500 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" /></svg>}
-                    {convertState === 'done'       && <svg className="w-3.5 h-3.5 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7" strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} /></svg>}
-                    {convertState === 'error'      && <svg className="w-3.5 h-3.5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12" strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} /></svg>}
+                    {convertState === 'done' && <svg className="w-3.5 h-3.5 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7" strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} /></svg>}
+                    {convertState === 'error' && <svg className="w-3.5 h-3.5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12" strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} /></svg>}
                     <span className={`font-semibold text-[11px] uppercase tracking-wider ${convertState === 'converting' ? 'text-blue-600' : convertState === 'done' ? 'text-teal-700' : convertState === 'error' ? 'text-red-600' : 'text-slate-400'}`}>
                       {convertState === 'converting' ? 'Converting to base64…' : convertState === 'done' ? '✓ Base64 ready' : convertState === 'error' ? 'Conversion failed' : 'Awaiting image'}
                     </span>

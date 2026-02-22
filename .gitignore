@@ -1,6 +1,11 @@
 # See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 
 actian-vectorAI-db-beta/
+FrontEndV2/aidaura/node_modules/
+FrontEndV2/aidaura/.next/
+
+front_end.txt/node_modules/
+front_end.txt/.next/
 
 # dependencies
 /node_modules

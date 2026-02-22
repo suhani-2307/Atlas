@@ -2,7 +2,7 @@
 
 Based on Household Income, we will determine the following:
 
-- Extract federal poverty loans information for government plans to help in medical
+<!-- - Extract federal poverty loans information for government plans to help in medical -->
 - Determine hospital payment plans/assistance
 
 Based on Visit Reason and Diagnosis, we will determine the following:
