@@ -68,6 +68,33 @@ async def _pipeline(reason: str, top_k: int, groq_client: Groq) -> List[dict]:
         seen_codes: set = set()
         all_results: List[dict] = []
 
+        if not categories:
+            results = await client.search(
+                COLLECTION_CPT,
+                query_vector,
+                top_k=top_k,
+                with_payload=True,
+            )
+            for r in results:
+                if r.payload:
+                    code = r.payload.get("cpt_code")
+                    if code not in seen_codes:
+                        seen_codes.add(code)
+                        all_results.append(
+                            {
+                                "cpt_code": code,
+                                "procedure_code_category": r.payload.get(
+                                    "procedure_code_category"
+                                ),
+                                "procedure_code_description": r.payload.get(
+                                    "procedure_code_description"
+                                ),
+                                "score": r.score,
+                            }
+                        )
+            all_results.sort(key=lambda x: x["score"], reverse=True)
+            return all_results[:top_k]
+
         for cat in categories:
             cat_filter = Filter().must(Field("procedure_code_category").eq(cat))
             results = await client.search(

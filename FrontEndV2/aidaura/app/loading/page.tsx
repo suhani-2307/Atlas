@@ -1,9 +1,10 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
+import { fetchAllResults } from '@/app/utils'
 
-type StepState = 'pending' | 'active' | 'done'
+type StepState = 'pending' | 'active' | 'done' | 'error'
 
 interface Step {
   label: string
@@ -13,31 +14,38 @@ interface Step {
 }
 
 const STEPS: Step[] = [
-  { label: 'Connecting to provider…', doneLabel: 'Connected', detail: 'Reached provider endpoint', color: '#10b981' },
-  { label: 'Authenticating…', doneLabel: 'Authenticated', detail: 'Member identity verified', color: '#2563eb' },
-  { label: 'Retrieving coverage…', doneLabel: 'Coverage retrieved', detail: 'Benefits loaded successfully', color: '#10b981' },
+  { label: 'Estimating procedure costs\u2026', doneLabel: 'Costs estimated', detail: 'Procedure pricing retrieved', color: '#10b981' },
+  { label: 'Calculating financial assistance\u2026', doneLabel: 'Assistance calculated', detail: 'FPL discount determined', color: '#2563eb' },
+  { label: 'Ranking your options\u2026', doneLabel: 'Options ranked', detail: 'Best pathways identified', color: '#10b981' },
 ]
 
 export default function LoadingPage() {
   const router = useRouter()
   const [states, setStates] = useState<StepState[]>(['pending', 'pending', 'pending'])
+  const started = useRef(false)
 
   useEffect(() => {
-    const name = sessionStorage.getItem('aidaura_name') || 'Member'
-    const provider = sessionStorage.getItem('aidaura_provider') || 'your provider'
+    if (started.current) return
+    started.current = true
 
-    const timings = [
-      [400, 1200],
-      [1300, 2200],
-      [2300, 3300],
-    ]
+    async function run() {
+      setStates(['active', 'active', 'pending'])
 
-    timings.forEach(([activateAt, doneAt], i) => {
-      setTimeout(() => setStates(s => { const n = [...s]; n[i] = 'active'; return n }), activateAt)
-      setTimeout(() => setStates(s => { const n = [...s]; n[i] = 'done'; return n }), doneAt)
-    })
+      await fetchAllResults((step, status) => {
+        setStates(s => {
+          const n = [...s]
+          if (status === 'start') n[step] = 'active'
+          else if (status === 'done') n[step] = 'done'
+          else n[step] = 'error'
+          return n
+        })
+      })
 
-    setTimeout(() => router.push('/results'), 4000)
+      // Navigate to results after a brief pause so user sees final state
+      setTimeout(() => router.push('/results'), 800)
+    }
+
+    run()
   }, [router])
 
   return (
@@ -70,7 +78,7 @@ export default function LoadingPage() {
             Fetching Aura
           </h2>
           <p className="text-lg text-slate-600 max-w-lg mx-auto font-medium">
-            Please wait while we gather your insurance details and benefits.
+            Please wait while we analyze your situation and find the best options.
           </p>
         </div>
 
@@ -98,13 +106,21 @@ export default function LoadingPage() {
                         </svg>
                       </div>
                     )}
+                    {state === 'error' && (
+                      <div className="w-6 h-6 rounded-full bg-amber-400 flex items-center justify-center">
+                        <span className="text-white text-xs font-bold">!</span>
+                      </div>
+                    )}
                   </div>
                   <div>
-                    <span className={`text-lg font-${state === 'done' ? 'bold text-slate-900' : 'medium text-slate-500'}`}>
-                      {state === 'done' ? step.doneLabel : step.label}
+                    <span className={`text-lg ${state === 'done' ? 'font-bold text-slate-900' : state === 'error' ? 'font-medium text-amber-600' : 'font-medium text-slate-500'}`}>
+                      {state === 'done' ? step.doneLabel : state === 'error' ? 'Partial data' : step.label}
                     </span>
                     {state === 'done' && (
                       <p className="text-xs text-slate-400 mt-0.5">{step.detail}</p>
+                    )}
+                    {state === 'error' && (
+                      <p className="text-xs text-amber-500 mt-0.5">Continuing with available data</p>
                     )}
                   </div>
                 </li>
@@ -130,7 +146,7 @@ export default function LoadingPage() {
               <path d="M9 12l2 2 4-4" strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} />
             </svg>
           </div>
-          <span>© 2026 AidAura. All rights reserved.</span>
+          <span>&copy; 2026 AidAura. All rights reserved.</span>
         </div>
         <nav className="flex gap-6">
           <a href="#" className="hover:text-slate-600 transition-colors">Privacy Policy</a>

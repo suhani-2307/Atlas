@@ -60,7 +60,12 @@ def get_cost_estimate_from_groq(cpt_code: str, description: str, category: str) 
 
 app = Flask(__name__)
 app.config["JSON_SORT_KEYS"] = False
-CORS(app)
+CORS(
+    app,
+    resources={r"/*": {"origins": "http://localhost:3000"}},
+    methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization"],
+)
 
 # In-memory storage for demo purposes
 items = {}
@@ -208,6 +213,151 @@ def fpl_discount():
             "estimated_deduction_amount": round(deduction_amount, 2),
         }
     )
+
+
+@app.route("/rank-options", methods=["POST", "OPTIONS"])
+def rank_options():
+
+    if request.method == "OPTIONS":
+        return "", 204
+
+    data = request.get_json() or {}
+
+    try:
+        oop = float(data.get("estimated_oop", 0))
+    except (TypeError, ValueError):
+        return jsonify({"error": "estimated_oop must be a number"}), 400
+    if oop <= 0:
+        return jsonify({"error": "estimated_oop must be greater than 0"}), 400
+
+    try:
+        income_percent_fpl = float(data.get("income_percent_fpl", 0))
+    except (TypeError, ValueError):
+        return jsonify({"error": "income_percent_fpl must be a number"}), 400
+
+    insurance_type = data.get("insurance_type", "PPO")  # PPO, HDHP, Medicaid, Uninsured
+    in_network = bool(data.get("in_network", True))
+    hospital_policy = data.get("hospital_charity_policy", {})
+    if not hospital_policy:
+        return jsonify({"error": "hospital_charity_policy is required"}), 400
+    negotiation_rate = data.get("negotiation_success_rate", 0.2)
+    payment_plan_months = data.get("hospital_payment_plan_months", 12)
+    loan_apr = data.get("loan_apr", 0.15)
+    loan_term = data.get("loan_term_months", 24)
+
+    options = []
+
+    free_care_threshold = hospital_policy.get("free_care_threshold", 100)
+    discount_threshold = hospital_policy.get("discount_threshold", 300)
+    discount_percent = hospital_policy.get("discount_percent", 0)
+
+    # ----------------------------
+    # 1 Charity Care (Income-based)
+    # ----------------------------
+    if income_percent_fpl <= free_care_threshold:
+        options.append(
+            {
+                "name": "Full Charity Care",
+                "total_cost": 0,
+                "monthly_payment": 0,
+                "risk": 0.1,
+            }
+        )
+
+    elif income_percent_fpl <= discount_threshold:
+        discounted = oop * (1 - discount_percent)
+        options.append(
+            {
+                "name": "Partial Charity Care",
+                "total_cost": discounted,
+                "monthly_payment": discounted / payment_plan_months,
+                "risk": 0.2,
+            }
+        )
+
+    # ----------------------------
+    # 2 Insurance Appeal (OON scenario)
+    # ----------------------------
+    if not in_network and insurance_type not in ["Medicaid"]:
+        options.append(
+            {
+                "name": "Insurance Appeal for Out-of-Network Coverage",
+                "total_cost": oop * 0.8,
+                "monthly_payment": (oop * 0.8) / 12,
+                "risk": 0.3,
+            }
+        )
+
+    # ----------------------------
+    # 3 Bill Negotiation
+    # ----------------------------
+    negotiated_cost = oop * (1 - negotiation_rate)
+    options.append(
+        {
+            "name": "Direct Bill Negotiation",
+            "total_cost": negotiated_cost,
+            "monthly_payment": negotiated_cost / 12,
+            "risk": 0.25,
+        }
+    )
+
+    # ----------------------------
+    # 4 Hospital Payment Plan
+    # ----------------------------
+    options.append(
+        {
+            "name": "Hospital Interest-Free Payment Plan",
+            "total_cost": oop,
+            "monthly_payment": oop / payment_plan_months,
+            "risk": 0.05,
+        }
+    )
+
+    # ----------------------------
+    # 5 HSA/FSA (if HDHP)
+    # ----------------------------
+    if insurance_type == "HDHP" and data.get("hsa_balance", 0) > 0:
+        options.append(
+            {
+                "name": "Use HSA Funds",
+                "total_cost": oop,
+                "monthly_payment": 0,
+                "risk": 0.01,
+            }
+        )
+
+    # ----------------------------
+    # 6 Medical Loan (last resort)
+    # ----------------------------
+    total_with_interest = oop * (1 + loan_apr)
+    options.append(
+        {
+            "name": "Medical Loan Financing",
+            "total_cost": total_with_interest,
+            "monthly_payment": total_with_interest / loan_term,
+            "risk": 0.5,
+        }
+    )
+
+    # ----------------------------
+    # Scoring
+    # ----------------------------
+    max_cost = max(o["total_cost"] for o in options)
+    if max_cost == 0:
+        max_cost = 1
+
+    for o in options:
+        normalized_cost = o["total_cost"] / max_cost
+        normalized_monthly = (o["monthly_payment"] / oop) if oop > 0 else 0
+
+        o["score"] = 0.5 * normalized_cost + 0.3 * normalized_monthly + 0.2 * o["risk"]
+
+    ranked = sorted(options, key=lambda x: x["score"])
+
+    for r in ranked:
+        r.pop("score")
+
+    return jsonify({"ranked_options": ranked[:4]})
 
 
 @app.route("/api/insurance/extract", methods=["POST"])
