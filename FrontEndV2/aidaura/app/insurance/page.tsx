@@ -137,6 +137,11 @@ export default function InsurancePage() {
   const [groupNumber, setGroupNumber]   = useState('')
   const [manualError, setManualError]   = useState('')
 
+  // Household info (applies to all flows)
+  const [householdIncome, setHouseholdIncome] = useState('')
+  const [familySize, setFamilySize]           = useState('')
+  const [householdError, setHouseholdError]   = useState('')
+
   useEffect(() => { return () => stopStream() }, [])
 
   const stopStream = () => {
@@ -356,6 +361,14 @@ Rules:
 
   // ── final submit (navigate) ───────────────────────────────────────────────
   const handleSubmit = async () => {
+    if (!householdIncome.trim() || !familySize.trim()) {
+      setHouseholdError('Please fill in household income and family size before continuing.')
+      // Scroll to the household section
+      document.getElementById('household-section')?.scrollIntoView({ behavior: 'smooth' })
+      return
+    }
+    sessionStorage.setItem('aidaura_household_income', householdIncome.trim())
+    sessionStorage.setItem('aidaura_family_size',      familySize.trim())
     if (base64Data) {
       sessionStorage.setItem('aidaura_insurance_image', base64Data)
     }
@@ -380,9 +393,15 @@ Rules:
       setManualError('Both fields are required.')
       return
     }
-    sessionStorage.setItem('aidaura_member_id',    memberId.trim())
-    sessionStorage.setItem('aidaura_group_number', groupNumber.trim())
-    sessionStorage.setItem('aidaura_input_method', 'manual')
+    if (!householdIncome.trim() || !familySize.trim()) {
+      setManualError('Please also fill in your household income and family size on the main page.')
+      return
+    }
+    sessionStorage.setItem('aidaura_member_id',        memberId.trim())
+    sessionStorage.setItem('aidaura_group_number',     groupNumber.trim())
+    sessionStorage.setItem('aidaura_input_method',     'manual')
+    sessionStorage.setItem('aidaura_household_income', householdIncome.trim())
+    sessionStorage.setItem('aidaura_family_size',      familySize.trim())
     router.push('/emergency')
   }
 
@@ -441,9 +460,104 @@ Rules:
             </button>
           </div>
 
-          <div className="flex justify-center mt-12">
+          {/* ── Household Info Section ── */}
+          <div id="household-section" className="mt-10 max-w-2xl mx-auto">
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+              {/* Section header */}
+              <div className="flex items-center gap-3 px-6 py-4 bg-gradient-to-r from-blue-50 to-teal-50 border-b border-slate-100">
+                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-teal-500 flex items-center justify-center flex-shrink-0">
+                  <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} />
+                  </svg>
+                </div>
+                <div className="text-left">
+                  <h3 className="text-sm font-bold text-slate-800">Household Information</h3>
+                  <p className="text-xs text-slate-500 mt-0.5">Used to determine your coverage eligibility and subsidy options</p>
+                </div>
+              </div>
+
+              {/* Fields */}
+              <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-5">
+                {/* Annual Household Income */}
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">
+                    Annual Household Income <span className="text-red-400">*</span>
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-semibold text-sm pointer-events-none">$</span>
+                    <input
+                      type="number"
+                      min="0"
+                      value={householdIncome}
+                      onChange={e => { setHouseholdIncome(e.target.value); setHouseholdError('') }}
+                      placeholder="e.g. 55000"
+                      className="w-full pl-7 pr-4 py-3 rounded-xl border-2 border-slate-200 focus:border-blue-400 focus:outline-none text-slate-900 placeholder-slate-400 text-sm transition-colors"
+                    />
+                  </div>
+                  <p className="text-xs text-slate-400 mt-1.5">Enter your total annual gross income</p>
+                </div>
+
+                {/* Family Size */}
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">
+                    Family Size <span className="text-red-400">*</span>
+                  </label>
+                  <div className="relative">
+                    <select
+                      value={familySize}
+                      onChange={e => { setFamilySize(e.target.value); setHouseholdError('') }}
+                      className="w-full px-4 py-3 rounded-xl border-2 border-slate-200 focus:border-blue-400 focus:outline-none text-slate-900 text-sm transition-colors appearance-none bg-white cursor-pointer"
+                    >
+                      <option value="">Select family size…</option>
+                      {[1,2,3,4,5,6,7,8].map(n => (
+                        <option key={n} value={String(n)}>
+                          {n} {n === 1 ? 'person' : 'people'}{n === 1 ? ' (just me)' : n === 2 ? ' (couple / parent + child)' : ''}
+                        </option>
+                      ))}
+                      <option value="9+">9+ people</option>
+                    </select>
+                    <svg className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path d="M19 9l-7 7-7-7" strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} />
+                    </svg>
+                  </div>
+                  <p className="text-xs text-slate-400 mt-1.5">Include all dependents covered by this plan</p>
+                </div>
+              </div>
+
+              {/* FPL indicator — shown once both fields filled */}
+              {householdIncome && familySize && (
+                <div className="mx-6 mb-5 px-4 py-3 rounded-xl bg-teal-50 border border-teal-100 flex items-start gap-2.5">
+                  <svg className="w-4 h-4 text-teal-600 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} />
+                  </svg>
+                  <p className="text-xs text-teal-800">
+                    <strong>Got it!</strong> Household income of <strong>${Number(householdIncome).toLocaleString()}</strong> for <strong>{familySize} {Number(familySize) === 1 ? 'person' : 'people'}</strong> — we&apos;ll use this to find your best coverage options and check subsidy eligibility.
+                  </p>
+                </div>
+              )}
+
+              {/* Error */}
+              {householdError && (
+                <div className="mx-6 mb-5 px-4 py-3 rounded-xl bg-red-50 border border-red-100 flex items-center gap-2 text-sm text-red-600">
+                  <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 9v2m0 4h.01M12 4a8 8 0 100 16 8 8 0 000-16z" strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} /></svg>
+                  {householdError}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="flex justify-center mt-10">
             <button
-              onClick={() => router.push('/emergency')}
+              onClick={() => {
+                if (!householdIncome.trim() || !familySize.trim()) {
+                  setHouseholdError('Please fill in your household income and family size before continuing.')
+                  document.getElementById('household-section')?.scrollIntoView({ behavior: 'smooth' })
+                  return
+                }
+                sessionStorage.setItem('aidaura_household_income', householdIncome.trim())
+                sessionStorage.setItem('aidaura_family_size', familySize.trim())
+                router.push('/emergency')
+              }}
               className="px-10 py-4 bg-gradient-to-r from-primary to-accent-green text-white font-bold text-lg rounded-xl shadow-lg hover:scale-[1.02] active:scale-[0.98] transition-all duration-300 flex items-center gap-2"
             >
               Continue
@@ -706,10 +820,61 @@ Rules:
                     value={groupNumber}
                     onChange={e => { setGroupNumber(e.target.value); setManualError('') }}
                     placeholder="e.g. GA6085M024"
-                    onKeyDown={e => e.key === 'Enter' && handleManualSubmit()}
                     className="w-full px-4 py-3 rounded-xl border-2 border-slate-200 focus:border-blue-400 focus:outline-none text-slate-900 placeholder-slate-400 text-sm font-mono transition-colors"
                   />
                 </div>
+
+                {/* Divider */}
+                <div className="flex items-center gap-3 pt-1">
+                  <div className="flex-1 h-px bg-slate-100" />
+                  <span className="text-xs text-slate-400 font-medium">Household Details</span>
+                  <div className="flex-1 h-px bg-slate-100" />
+                </div>
+
+                {/* Annual Household Income */}
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">
+                    Annual Household Income <span className="text-red-400">*</span>
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-semibold text-sm pointer-events-none">$</span>
+                    <input
+                      type="number"
+                      min="0"
+                      value={householdIncome}
+                      onChange={e => { setHouseholdIncome(e.target.value); setManualError('') }}
+                      placeholder="e.g. 55000"
+                      className="w-full pl-7 pr-4 py-3 rounded-xl border-2 border-slate-200 focus:border-blue-400 focus:outline-none text-slate-900 placeholder-slate-400 text-sm transition-colors"
+                    />
+                  </div>
+                </div>
+
+                {/* Family Size */}
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">
+                    Family Size <span className="text-red-400">*</span>
+                  </label>
+                  <div className="relative">
+                    <select
+                      value={familySize}
+                      onChange={e => { setFamilySize(e.target.value); setManualError('') }}
+                      onKeyDown={e => e.key === 'Enter' && handleManualSubmit()}
+                      className="w-full px-4 py-3 rounded-xl border-2 border-slate-200 focus:border-blue-400 focus:outline-none text-slate-900 text-sm transition-colors appearance-none bg-white cursor-pointer"
+                    >
+                      <option value="">Select family size…</option>
+                      {[1,2,3,4,5,6,7,8].map(n => (
+                        <option key={n} value={String(n)}>
+                          {n} {n === 1 ? 'person (just me)' : n === 2 ? 'people (couple / parent + child)' : 'people'}
+                        </option>
+                      ))}
+                      <option value="9+">9+ people</option>
+                    </select>
+                    <svg className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path d="M19 9l-7 7-7-7" strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} />
+                    </svg>
+                  </div>
+                </div>
+
                 {manualError && (
                   <p className="text-sm text-red-500 flex items-center gap-1.5">
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 9v2m0 4h.01M12 4a8 8 0 100 16 8 8 0 000-16z" strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} /></svg>
@@ -720,7 +885,7 @@ Rules:
 
               <p className="text-xs text-slate-400 mt-5 flex items-start gap-1.5">
                 <svg className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} /></svg>
-                Find these on the front of your insurance card, usually near your name.
+                Member ID and Group Number are on the front of your insurance card.
               </p>
 
               <button
