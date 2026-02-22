@@ -4,6 +4,7 @@ A basic Flask API with common patterns for building RESTful APIs.
 """
 
 from flask import Flask, request, jsonify
+from flask_cors import CORS
 from datetime import datetime
 from functools import wraps
 import os
@@ -15,7 +16,6 @@ from vision_ocr_api import (
     PROMPT_TEXT,
     get_client,
     normalize_base64,
-    image_file_to_base64,
 )
 
 load_dotenv(".env.example")  # Load environment variables from .env file
@@ -23,6 +23,7 @@ load_dotenv(".env.example")  # Load environment variables from .env file
 
 app = Flask(__name__)
 app.config["JSON_SORT_KEYS"] = False
+CORS(app)
 
 # In-memory storage for demo purposes
 items = {}
@@ -168,13 +169,24 @@ def fpl_discount():
 
 @app.route("/api/insurance/extract", methods=["POST"])
 def get_extracted_insurance():
-    """Extract insurance info from base64 image string provided in JSON body"""
+    """Extract insurance info from base64 image or manual member_id/group_number"""
     payload = request.get_json(silent=True) or {}
     base64_value = payload.get("image_base64")
+    member_id    = payload.get("member_id")
+    group_number = payload.get("group_number")
 
+    # ── Manual path: no image, just text fields ──────────────────────────────
     if not base64_value:
-        return jsonify({"error": "Missing image_base64 in request body"}), 400
+        if not member_id or not group_number:
+            return jsonify({"error": "Provide either image_base64 or both member_id and group_number"}), 400
+        return jsonify({
+            "member_id":    member_id,
+            "group_number": group_number,
+            "insurer_name": "",
+            "plan_name":    "",
+        }), 200
 
+    # ── Image path ────────────────────────────────────────────────────────────
     base64_image = normalize_base64(base64_value.strip())
 
     try:
