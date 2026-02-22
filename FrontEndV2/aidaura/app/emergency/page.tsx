@@ -102,27 +102,16 @@ function AutocompleteField({ id, label, icon, placeholder, items, value, onChang
 
 export default function EmergencyPage() {
   const router = useRouter()
-  const [hospital,        setHospital]        = useState('')
-  const [state,           setState]           = useState('')
-  const [situation,       setSituation]       = useState('')
-  const [householdIncome, setHouseholdIncome] = useState('')
-  const [familySize,      setFamilySize]      = useState('')
+  const [hospital,  setHospital]  = useState('')
+  const [state,     setState]     = useState('')
+  const [situation, setSituation] = useState('')
 
   const handleAnalyze = (e: React.FormEvent) => {
     e.preventDefault()
-    if (situation.trim())       sessionStorage.setItem('aidaura_situation',        situation.trim())
-    if (hospital.trim())        sessionStorage.setItem('aidaura_hospital',         hospital.trim())
-    if (state.trim())           sessionStorage.setItem('aidaura_state',            state.trim())
-    if (householdIncome.trim()) sessionStorage.setItem('aidaura_household_income', householdIncome.trim())
-    if (familySize.trim())      sessionStorage.setItem('aidaura_family_size',      familySize.trim())
+    if (situation.trim()) sessionStorage.setItem('aidaura_situation', situation.trim())
+    if (hospital.trim())  sessionStorage.setItem('aidaura_hospital',  hospital.trim())
+    if (state.trim())     sessionStorage.setItem('aidaura_state',     state.trim())
     router.push('/loading')
-  }
-
-  // Format income as currency on change
-  const handleIncomeChange = (raw: string) => {
-    const digits = raw.replace(/\D/g, '')
-    if (!digits) { setHouseholdIncome(''); return }
-    setHouseholdIncome(Number(digits).toLocaleString())
   }
 
   const hospitalIcon = (
@@ -159,70 +148,6 @@ export default function EmergencyPage() {
                   placeholder="Search hospital…" items={HOSPITALS} value={hospital} onChange={setHospital}/>
                 <AutocompleteField id="state" label="Current State" icon={stateIcon}
                   placeholder="Search state…" items={STATES} value={state} onChange={setState}/>
-              </div>
-
-              {/* Household income + Family size */}
-              <div className="grid md:grid-cols-2 gap-6">
-                {/* Income */}
-                <div className="space-y-4">
-                  <label className="block text-xs font-bold uppercase tracking-widest text-slate-400 px-1" htmlFor="income-input">
-                    Household Income
-                  </label>
-                  <div className="relative">
-                    <div className="absolute left-5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}/>
-                      </svg>
-                    </div>
-                    <span className="absolute left-14 top-1/2 -translate-y-1/2 text-slate-400 font-semibold text-base pointer-events-none select-none">$</span>
-                    <input
-                      id="income-input"
-                      type="text"
-                      inputMode="numeric"
-                      value={householdIncome}
-                      onChange={e => handleIncomeChange(e.target.value)}
-                      placeholder="e.g. 45,000"
-                      className="w-full bg-white border border-slate-200 rounded-2xl pl-20 pr-5 py-5 text-slate-800 text-base placeholder:text-slate-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all shadow-sm"
-                    />
-                  </div>
-                  <p className="text-xs text-slate-400 px-1">Annual gross household income</p>
-                </div>
-
-                {/* Family size */}
-                <div className="space-y-4">
-                  <label className="block text-xs font-bold uppercase tracking-widest text-slate-400 px-1" htmlFor="family-input">
-                    Family Size
-                  </label>
-                  <div className="relative">
-                    <div className="absolute left-5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}/>
-                      </svg>
-                    </div>
-                    {/* Stepper buttons */}
-                    <input
-                      id="family-input"
-                      type="number"
-                      min="1"
-                      max="20"
-                      value={familySize}
-                      onChange={e => setFamilySize(e.target.value)}
-                      placeholder="e.g. 3"
-                      className="w-full bg-white border border-slate-200 rounded-2xl pl-14 pr-16 py-5 text-slate-800 text-base placeholder:text-slate-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all shadow-sm [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                    />
-                    <div className="absolute right-3 top-1/2 -translate-y-1/2 flex flex-col gap-0.5">
-                      <button type="button" onClick={() => setFamilySize(v => String(Math.min(20, (parseInt(v) || 0) + 1)))}
-                        className="w-7 h-7 rounded-lg bg-slate-100 hover:bg-slate-200 flex items-center justify-center transition-colors">
-                        <svg className="w-3.5 h-3.5 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M5 15l7-7 7 7" strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5}/></svg>
-                      </button>
-                      <button type="button" onClick={() => setFamilySize(v => String(Math.max(1, (parseInt(v) || 2) - 1)))}
-                        className="w-7 h-7 rounded-lg bg-slate-100 hover:bg-slate-200 flex items-center justify-center transition-colors">
-                        <svg className="w-3.5 h-3.5 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M19 9l-7 7-7-7" strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5}/></svg>
-                      </button>
-                    </div>
-                  </div>
-                  <p className="text-xs text-slate-400 px-1">Number of people in your household</p>
-                </div>
               </div>
 
               {/* Situation */}
