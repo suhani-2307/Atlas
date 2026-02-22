@@ -10,6 +10,8 @@ from functools import wraps
 import os
 import json
 from dotenv import load_dotenv
+from groq import Groq
+from pydantic import BaseModel
 from vision_ocr_api import (
     InsuranceId,
     MODEL_NAME,
@@ -19,7 +21,41 @@ from vision_ocr_api import (
 )
 from cpt_search import search_cpt_by_reason
 
-load_dotenv(".env.example")  # Load environment variables from .env file
+load_dotenv()  # Load environment variables from .env file
+
+_groq_client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
+
+GROQ_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct"
+
+
+class CostEstimate(BaseModel):
+    in_network: float
+    out_of_network: float
+    reasoning: str
+
+
+def get_cost_estimate_from_groq(cpt_code: str, description: str, category: str) -> dict:
+    prompt = (
+        f"You are a US healthcare billing estimator.\n\n"
+        f"CPT Code: {cpt_code}\n"
+        f"Procedure Description: {description}\n"
+        f"Category: {category}\n\n"
+        f"Provide realistic estimated costs in USD for in_network and out_of_network."
+    )
+    response = _groq_client.chat.completions.create(
+        model=GROQ_MODEL,
+        messages=[{"role": "user", "content": prompt}],
+        response_format={
+            "type": "json_schema",
+            "json_schema": {
+                "name": "cost_estimate",
+                "schema": CostEstimate.model_json_schema(),
+            },
+        },
+        temperature=0.3,
+    )
+    content = response.choices[0].message.content or ""
+    return CostEstimate.model_validate_json(content).model_dump()
 
 
 app = Flask(__name__)
@@ -103,10 +139,11 @@ def index():
                     },
                     "cpt": {
                         "search": "POST /api/cpt/search",
+                        "pricing": "POST /api/cpt/pricing",
                     },
                 },
             }
-        ),  
+        ),
         200,
     )
 
@@ -178,19 +215,31 @@ def get_extracted_insurance():
     """Extract insurance info from base64 image or manual member_id/group_number"""
     payload = request.get_json(silent=True) or {}
     base64_value = payload.get("image_base64")
-    member_id    = payload.get("member_id")
+    member_id = payload.get("member_id")
     group_number = payload.get("group_number")
 
     # ── Manual path: no image, just text fields ──────────────────────────────
     if not base64_value:
         if not member_id or not group_number:
-            return jsonify({"error": "Provide either image_base64 or both member_id and group_number"}), 400
-        return jsonify({
-            "member_id":    member_id,
-            "group_number": group_number,
-            "insurer_name": "",
-            "plan_name":    "",
-        }), 200
+            return (
+                jsonify(
+                    {
+                        "error": "Provide either image_base64 or both member_id and group_number"
+                    }
+                ),
+                400,
+            )
+        return (
+            jsonify(
+                {
+                    "member_id": member_id,
+                    "group_number": group_number,
+                    "insurer_name": "",
+                    "plan_name": "",
+                }
+            ),
+            200,
+        )
 
     # ── Image path ────────────────────────────────────────────────────────────
     base64_image = normalize_base64(base64_value.strip())
@@ -238,10 +287,39 @@ def cpt_search():
     top_k = data.get("top_k", 10)
     score_threshold = data.get("score_threshold", 0.5)
     try:
-        results = search_cpt_by_reason(reason, top_k=top_k, score_threshold=score_threshold)
+        results = search_cpt_by_reason(
+            reason, top_k=top_k, score_threshold=score_threshold
+        )
         return jsonify({"reason": reason, "results": results}), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/cpt/pricing", methods=["POST"])
+def cpt_pricing():
+    data = request.get_json(silent=True) or {}
+    reason = data.get("reason", "").strip()
+    if not reason:
+        return jsonify({"error": "Provide a non-empty 'reason' field"}), 400
+    top_k = data.get("top_k", 10)
+    score_threshold = data.get("score_threshold", 0.5)
+    try:
+        cpt_results = search_cpt_by_reason(
+            reason, top_k=top_k, score_threshold=score_threshold
+        )
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+    results_with_pricing = []
+    for item in cpt_results:
+        estimate = get_cost_estimate_from_groq(
+            item["cpt_code"],
+            item["procedure_code_description"],
+            item["procedure_code_category"],
+        )
+        results_with_pricing.append({**item, "estimated_cost": estimate})
+
+    return jsonify({"reason": reason, "results": results_with_pricing}), 200
 
 
 # ==================== Entry Point ====================
