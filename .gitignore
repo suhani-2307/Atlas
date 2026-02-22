@@ -2,6 +2,9 @@
 
 actian-vectorAI-db-beta/
 
+FrontEndV2/aidaura/node_modules/
+FrontEndV2/aidaura/.next/
+
 # dependencies
 /node_modules
 /.pnp
