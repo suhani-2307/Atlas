@@ -17,6 +17,7 @@ from vision_ocr_api import (
     get_client,
     normalize_base64,
 )
+from cpt_search import search_cpt_by_reason
 
 load_dotenv(".env.example")  # Load environment variables from .env file
 
@@ -100,9 +101,12 @@ def index():
                     "fpl_discount": {
                         "calculate": "POST /fpl-discount",
                     },
+                    "cpt": {
+                        "search": "POST /api/cpt/search",
+                    },
                 },
             }
-        ),
+        ),  
         200,
     )
 
@@ -221,6 +225,21 @@ def get_extracted_insurance():
 
         content = chat_completion.choices[0].message.content
         return jsonify(json.loads(content)), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/cpt/search", methods=["POST"])
+def cpt_search():
+    data = request.get_json(silent=True) or {}
+    reason = data.get("reason", "").strip()
+    if not reason:
+        return jsonify({"error": "Provide a non-empty 'reason' field"}), 400
+    top_k = data.get("top_k", 10)
+    score_threshold = data.get("score_threshold", 0.5)
+    try:
+        results = search_cpt_by_reason(reason, top_k=top_k, score_threshold=score_threshold)
+        return jsonify({"reason": reason, "results": results}), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
