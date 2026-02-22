@@ -39,6 +39,78 @@ const FIELDS: { key: keyof InsuranceData; label: string; full?: boolean }[] = [
   { key: 'effective_date', label: 'Effective Date'},
 ]
 
+// ── Helpers ────────────────────────────────────────────────────────────────
+
+/**
+ * Read a File as a base64 data URL (works for images and PDFs).
+ */
+function readFileAsDataURL(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload  = () => resolve(reader.result as string)
+    reader.onerror = () => reject(new Error('Failed to read file'))
+    reader.readAsDataURL(file)
+  })
+}
+
+/**
+ * For PDF files the Anthropic vision API cannot accept application/pdf directly
+ * as an image source. We render the first page onto a canvas and return a
+ * JPEG data URL so the rest of the pipeline stays identical.
+ *
+ * Falls back to returning the original data URL if the pdf.js CDN is
+ * unavailable (network restricted environments).
+ */
+async function pdfToImageDataURL(pdfDataUrl: string): Promise<string> {
+  try {
+    // Dynamically load pdf.js from CDN
+    if (!(window as any).pdfjsLib) {
+      await new Promise<void>((resolve, reject) => {
+        const script = document.createElement('script')
+        script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js'
+        script.onload  = () => resolve()
+        script.onerror = () => reject(new Error('pdf.js load failed'))
+        document.head.appendChild(script)
+      })
+      ;(window as any).pdfjsLib.GlobalWorkerOptions.workerSrc =
+        'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'
+    }
+
+    const pdfjsLib = (window as any).pdfjsLib
+    // Convert data URL to Uint8Array
+    const base64 = pdfDataUrl.split(',')[1]
+    const binary  = atob(base64)
+    const bytes   = new Uint8Array(binary.length)
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
+
+    const pdf  = await pdfjsLib.getDocument({ data: bytes }).promise
+    const page = await pdf.getPage(1)
+    const viewport = page.getViewport({ scale: 2.0 }) // 2× for readable resolution
+
+    const canvas = document.createElement('canvas')
+    canvas.width  = viewport.width
+    canvas.height = viewport.height
+    await page.render({ canvasContext: canvas.getContext('2d')!, viewport }).promise
+
+    return canvas.toDataURL('image/jpeg', 0.92)
+  } catch {
+    // If pdf.js fails, return original and let the API attempt it
+    return pdfDataUrl
+  }
+}
+
+/**
+ * Derive the Anthropic-accepted media type from the file's MIME type.
+ * Falls back to 'image/jpeg' for unknown types.
+ */
+function getMediaType(file: File): 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp' {
+  const mime = file.type.toLowerCase()
+  if (mime === 'image/png')  return 'image/png'
+  if (mime === 'image/gif')  return 'image/gif'
+  if (mime === 'image/webp') return 'image/webp'
+  return 'image/jpeg'
+}
+
 export default function InsurancePage() {
   const router = useRouter()
 
@@ -57,6 +129,7 @@ export default function InsurancePage() {
   const [analysisState, setAnalysisState] = useState<AnalysisState>('idle')
   const [insuranceData, setInsuranceData] = useState<InsuranceData | null>(null)
   const [analysisRaw, setAnalysisRaw]     = useState<string>('')
+  const [analysisError, setAnalysisError] = useState<string>('')
 
   // Manual input modal
   const [manualOpen, setManualOpen]     = useState(false)
@@ -81,18 +154,34 @@ export default function InsurancePage() {
     setAnalysisState('idle')
     setInsuranceData(null)
     setAnalysisRaw('')
+    setAnalysisError('')
   }
 
   // ── AI extraction ──────────────────────────────────────────────────────────
-  const analyzeImage = useCallback(async (dataUrl: string) => {
+  /**
+   * Accepts a data URL (image/* only — PDFs must be pre-converted).
+   * Strips the prefix, sends raw base64 to the Anthropic vision API,
+   * and parses the JSON response into InsuranceData.
+   */
+  const analyzeImage = useCallback(async (
+    imageDataUrl: string,
+    mediaType: 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp' = 'image/jpeg'
+  ) => {
     setAnalysisState('analyzing')
     setInsuranceData(null)
     setAnalysisRaw('')
+    setAnalysisError('')
 
-    const base64 = dataUrl.includes(',') ? dataUrl.split(',')[1] : dataUrl
-    const mediaType = dataUrl.startsWith('data:image/png')  ? 'image/png'
-                    : dataUrl.startsWith('data:image/webp') ? 'image/webp'
-                    : 'image/jpeg'
+    // Strip "data:<mime>;base64," prefix — the API needs raw base64 only
+    const base64 = imageDataUrl.includes(',')
+      ? imageDataUrl.split(',')[1]
+      : imageDataUrl
+
+    if (!base64 || base64.length < 100) {
+      setAnalysisState('error')
+      setAnalysisError('Image data is empty or too small to process.')
+      return
+    }
 
     try {
       const resp = await fetch('https://api.anthropic.com/v1/messages', {
@@ -106,12 +195,17 @@ export default function InsurancePage() {
             content: [
               {
                 type: 'image',
-                source: { type: 'base64', media_type: mediaType, data: base64 },
+                source: {
+                  type: 'base64',
+                  media_type: mediaType,  // must be exact Anthropic-accepted type
+                  data: base64,           // raw base64, NO data URL prefix
+                },
               },
               {
                 type: 'text',
-                text: `You are an insurance card OCR extractor. Analyze this image and extract insurance card details.
-Respond ONLY with a valid JSON object (no markdown, no explanation) with these exact keys:
+                text: `You are an insurance card OCR extractor. Carefully analyze every piece of text visible in this image and extract all insurance card details.
+
+Respond ONLY with a valid JSON object — no markdown fences, no explanation, no extra text — using exactly these keys:
 {
   "insurer_name": "",
   "member_name": "",
@@ -127,51 +221,97 @@ Respond ONLY with a valid JSON object (no markdown, no explanation) with these e
   "effective_date": "",
   "notes": ""
 }
-If a field is not visible or not applicable, use an empty string "".
-If this doesn't appear to be an insurance card, still return the JSON but add a note in the "notes" field.`,
+
+Rules:
+- Use an empty string "" for any field that is not visible or not present.
+- Preserve exact formatting for IDs and numbers (e.g. "KZZ479W08435").
+- If this does not appear to be an insurance card at all, set "notes" to explain what the image shows.
+- Do not add any keys beyond those listed above.`,
               },
             ],
           }],
         }),
       })
 
+      if (!resp.ok) {
+        const errBody = await resp.text()
+        throw new Error(`API error ${resp.status}: ${errBody.slice(0, 200)}`)
+      }
+
       const data = await resp.json()
       const text = (data.content as { type: string; text?: string }[])
         ?.map(c => c.text ?? '')
-        .join('') ?? ''
+        .join('')
+        .trim() ?? ''
+
+      if (!text) throw new Error('Empty response from API')
+
+      // Strip any accidental markdown fences before parsing
+      const clean = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim()
 
       try {
-        const clean = text.replace(/```json|```/g, '').trim()
         const parsed: InsuranceData = JSON.parse(clean)
         setInsuranceData(parsed)
-        // store key fields in sessionStorage (mirrors original handleSubmit)
-        sessionStorage.setItem('aidaura_provider',      parsed.insurer_name  ?? '')
-        sessionStorage.setItem('aidaura_member_id',     parsed.member_id     ?? '')
-        sessionStorage.setItem('aidaura_plan',          parsed.plan_name     ?? '')
-        sessionStorage.setItem('aidaura_group_number',  parsed.group_number  ?? '')
+        // Persist key fields to sessionStorage for downstream pages
+        sessionStorage.setItem('aidaura_provider',     parsed.insurer_name ?? '')
+        sessionStorage.setItem('aidaura_member_id',    parsed.member_id    ?? '')
+        sessionStorage.setItem('aidaura_plan',         parsed.plan_name    ?? '')
+        sessionStorage.setItem('aidaura_group_number', parsed.group_number ?? '')
+        sessionStorage.setItem('aidaura_insurance_data', JSON.stringify(parsed))
       } catch {
-        setAnalysisRaw(text.slice(0, 600))
+        // JSON parse failed — surface the raw text so user can see what came back
+        setAnalysisRaw(clean.slice(0, 800))
       }
+
       setAnalysisState('done')
     } catch (err: unknown) {
-      console.error(err)
+      const msg = err instanceof Error ? err.message : 'Unknown error'
+      console.error('[analyzeImage]', msg)
+      setAnalysisError(msg)
       setAnalysisState('error')
     }
   }, [])
 
   // ── file upload ────────────────────────────────────────────────────────────
+  /**
+   * Key fix: we await readFileAsDataURL, handle PDFs by rendering to canvas,
+   * set all state synchronously, then call analyzeImage AFTER state is set.
+   * This eliminates the stale-closure / race-condition from the old onload callback.
+   */
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
-    const reader = new FileReader()
-    reader.onload = ev => {
-      const dataUrl = ev.target?.result as string
+
+    // Reset the input so the same file can be re-selected if needed
+    e.target.value = ''
+
+    try {
+      // 1. Read the file as a base64 data URL
+      let dataUrl = await readFileAsDataURL(file)
+
+      // 2. If it's a PDF, render page 1 to a JPEG canvas image
+      const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')
+      let mediaType: 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp' = 'image/jpeg'
+
+      if (isPdf) {
+        dataUrl   = await pdfToImageDataURL(dataUrl)
+        mediaType = 'image/jpeg' // canvas always outputs JPEG here
+      } else {
+        mediaType = getMediaType(file)
+      }
+
+      // 3. Update state — view switches to preview first, then analysis starts
       setBase64Data(dataUrl)
       setPreviewSrc(dataUrl)
       setView('preview')
-      analyzeImage(dataUrl)
+
+      // 4. Kick off AI extraction with the correct mediaType
+      await analyzeImage(dataUrl, mediaType)
+    } catch (err) {
+      console.error('[handleFileChange]', err)
+      setAnalysisState('error')
+      setAnalysisError('Could not read the selected file. Please try a different image.')
     }
-    reader.readAsDataURL(file)
   }
 
   // ── camera ─────────────────────────────────────────────────────────────────
@@ -210,7 +350,8 @@ If this doesn't appear to be an insurance card, still return the JSON but add a 
     setBase64Data(dataUrl)
     setPreviewSrc(dataUrl)
     setView('preview')
-    analyzeImage(dataUrl)
+    // canvas always produces JPEG
+    analyzeImage(dataUrl, 'image/jpeg')
   }
 
   // ── final submit (navigate) ───────────────────────────────────────────────
@@ -410,7 +551,7 @@ If this doesn't appear to be an insurance card, still return the JSON but add a 
             {/* PREVIEW + AI EXTRACTION */}
             {view === 'preview' && previewSrc && (
               <div className="p-6 clear-both">
-                <button onClick={() => { setPreviewSrc(null); setBase64Data(null); setAnalysisState('idle'); setInsuranceData(null); setView('choose') }} className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-800 transition-colors mb-4">
+                <button onClick={() => { setPreviewSrc(null); setBase64Data(null); setAnalysisState('idle'); setInsuranceData(null); setAnalysisRaw(''); setAnalysisError(''); setView('choose') }} className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-800 transition-colors mb-4">
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M15 19l-7-7 7-7" strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} /></svg>
                   Retake / Choose different
                 </button>
@@ -442,7 +583,7 @@ If this doesn't appear to be an insurance card, still return the JSON but add a 
                     <div className="flex flex-col items-center justify-center py-6 px-4 gap-2">
                       <svg className="w-7 h-7 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 9v2m0 4h.01M12 4a8 8 0 100 16 8 8 0 000-16z" strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} /></svg>
                       <p className="font-semibold text-red-600 text-sm">Analysis failed</p>
-                      <p className="text-xs text-slate-400">Could not connect to AI service</p>
+                      <p className="text-xs text-slate-400 text-center">{analysisError || 'Could not connect to AI service'}</p>
                     </div>
                   )}
 
